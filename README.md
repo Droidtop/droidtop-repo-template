@@ -42,7 +42,7 @@ You need a GitHub organisation (or account) for your plugins, `openssl`, and Pyt
        bash tools/make_keys.sh root acme ~/acme-keys
 
    This writes four files: `root.key`, `root.crt`, `catalog-root.pub` and `droidtop-plugin-key.json`. **Keep `root.key`
-   offline.** Never commit it or put it in a
+   offline.** The leaves you make later add `root.srl`, openssl's serial counter: keep it beside `root.key`. Never commit it or put it in a
    secret: anyone with it can sign plugins as you. Commit `catalog-root.pub` to the top of this repository.
 3. **Fill in `catalog.json`:** `organisation` (the organisation or personal account your plugin repositories are in), `catalog.id` (this repository, as
    `owner/repo`), `catalog.name`, `catalog.homepage`, `catalog.origin` (step 1) and `disclaimer.text`. Copy the same

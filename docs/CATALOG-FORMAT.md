@@ -158,5 +158,6 @@ it refuses an unsigned copy. Without the secrets the index is published unsigned
 ## Revocation
 
 A revocation list for this catalog would be published as `revocations.jws` beside the index, signed
-with a leaf issued by the catalog root (EKU `.3`) naming `urn:droidtop:catalog:<owner>/<repo>`.
+with a leaf issued by the catalog root (EKU `.3`) naming `urn:droidtop:catalog:<owner>/<repo>`, which
+`tools/make_keys.sh revocation <owner>/<repo> <dir>` makes.
 Nothing is revoked, so none is published.

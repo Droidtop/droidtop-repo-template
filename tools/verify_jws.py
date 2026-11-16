@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verifies a detached droidtop JWS (see sign_jws.py) against a root public key (droidtop's root for official plugins, the catalog root for this catalog).
 Usage: verify_jws.py <typ> <content file> <jws file> <root.pub> [required SAN URN ...]
-Checks: ES256 over the exact content bytes with the x5c leaf's key; the leaf is signed by Core's key
+Checks: ES256 over the exact content bytes with the x5c leaf's key; the leaf is signed by the root's key
 (ECDSA or RSA), CA:FALSE, digitalSignature, carries the EKU for the typ, and names each given URN.
 Expiry is not checked (droidtop ignores it). Exits non-zero on any failure."""
 import base64, sys
@@ -15,7 +15,7 @@ EKU = {"droidtop-plugin+jws": EKU_BASE + ".1", "droidtop-catalog+jws": EKU_BASE 
 def b64d(s):
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
 
-def verify(typ, content, jws, core_pem, urns=()):
+def verify(typ, content, jws, root_pem, urns=()):
     import json
     h, mid, sig = jws.strip().split(".")
     if mid:
@@ -24,11 +24,11 @@ def verify(typ, content, jws, core_pem, urns=()):
     if header.get("alg") != "ES256" or header.get("typ") != typ or "crit" in header:
         raise ValueError("bad header %r" % header)
     leaf = x509.load_der_x509_certificate(base64.b64decode(header["x5c"][0]))
-    core = serialization.load_pem_public_key(core_pem)
-    if isinstance(core, ec.EllipticCurvePublicKey):
-        core.verify(leaf.signature, leaf.tbs_certificate_bytes, ec.ECDSA(leaf.signature_hash_algorithm))
+    root = serialization.load_pem_public_key(root_pem)
+    if isinstance(root, ec.EllipticCurvePublicKey):
+        root.verify(leaf.signature, leaf.tbs_certificate_bytes, ec.ECDSA(leaf.signature_hash_algorithm))
     else:
-        core.verify(leaf.signature, leaf.tbs_certificate_bytes, padding.PKCS1v15(), leaf.signature_hash_algorithm)
+        root.verify(leaf.signature, leaf.tbs_certificate_bytes, padding.PKCS1v15(), leaf.signature_hash_algorithm)
     bc = leaf.extensions.get_extension_for_class(x509.BasicConstraints).value
     ku = leaf.extensions.get_extension_for_class(x509.KeyUsage).value
     eku = [o.dotted_string for o in leaf.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value]
@@ -47,6 +47,6 @@ def verify(typ, content, jws, core_pem, urns=()):
     return san
 
 if __name__ == "__main__":
-    typ, cpath, jpath, corepath, *urns = sys.argv[1:]
-    san = verify(typ, open(cpath, "rb").read(), open(jpath).read(), open(corepath, "rb").read(), urns)
+    typ, cpath, jpath, rootpath, *urns = sys.argv[1:]
+    san = verify(typ, open(cpath, "rb").read(), open(jpath).read(), open(rootpath, "rb").read(), urns)
     print("OK", " ".join(san))

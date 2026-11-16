@@ -9,6 +9,9 @@
 #   make_keys.sh catalog <owner>/<repo> <dir>
 #       A catalog-signing leaf issued by the root in <dir>: <dir>/catalog.key and <dir>/catalog.crt. Their contents
 #       go into the catalog repository's secrets CATALOG_SIGNING_KEY and CATALOG_SIGNING_CERT.
+#   make_keys.sh revocation <owner>/<repo> <dir>
+#       A revocation-signing leaf issued by the root in <dir>: <dir>/revocation.key and <dir>/revocation.crt, for the
+#       catalog's revocations.jws (docs/CATALOG-FORMAT.md). Make it only when you need to revoke something.
 #   make_keys.sh plugin <origin> <plugin id or prefix.*> <dir> <name>
 #       A plugin-signing leaf issued by the root in <dir>: <dir>/<name>.key and <dir>/<name>.crt. Their contents go
 #       into the plugin repository's secrets PLUGIN_SIGNING_KEY and PLUGIN_SIGNING_CERT. Make one per repository.
@@ -22,7 +25,7 @@ export MSYS2_ARG_CONV_EXCL="/CN="
 EKU_BASE=2.25.230248497294207031301727532441854392946
 DAYS=36500
 
-usage() { sed -n '2,16p' "$0" >&2; exit 2; }
+usage() { sed -n '2,19p' "$0" >&2; exit 2; }
 [ $# -ge 3 ] || usage
 kind=$1
 
@@ -78,6 +81,11 @@ case "$kind" in
         case "$repo" in */*) ;; *) echo "catalog: give it as <owner>/<repo>" >&2; exit 2 ;; esac
         # A "/" would start a new name field in the subject; the URN below keeps the real <owner>/<repo>.
         leaf "$dir" catalog "/CN=${repo//\// } droidtop catalog" 2 "URI:urn:droidtop:catalog:$repo"
+        ;;
+    revocation)
+        repo=$2 dir=$3
+        case "$repo" in */*) ;; *) echo "revocation: give it as <owner>/<repo>" >&2; exit 2 ;; esac
+        leaf "$dir" revocation "/CN=${repo//\// } droidtop revocations" 3 "URI:urn:droidtop:catalog:$repo"
         ;;
     plugin)
         [ $# -ge 5 ] || usage
