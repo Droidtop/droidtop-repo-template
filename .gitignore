@@ -1,0 +1,9 @@
+__pycache__/
+
+# Private keys never belong in a repository: keep the root offline and leaves in repository secrets.
+*.key
+*.key.new
+*.p8
+*.pem
+!catalog-root.pub
+keys/

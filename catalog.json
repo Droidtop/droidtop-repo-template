@@ -1,0 +1,15 @@
+{
+  "organisation": "your-github-organisation",
+  "catalog": {
+    "id": "your-github-organisation/catalog",
+    "name": "Your catalog's name",
+    "homepage": "https://github.com/your-github-organisation/catalog",
+    "trust": "unofficial",
+    "origin": "yourorigin"
+  },
+  "disclaimer": {
+    "version": 1,
+    "text": "This catalog is unofficial. It is not part of droidtop, and the droidtop project does not make, review or endorse it or the plugins it lists. The catalog and its plugins are provided as is, without warranty of any kind. Concerns and takedown requests: https://github.com/your-github-organisation/catalog/issues"
+  },
+  "retired": {}
+}

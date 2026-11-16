@@ -1,0 +1,113 @@
+# Rebuilds index.json from the releases of every plugin repository in the organisation that
+# catalog.json names (tools/build_index.py), signs it when the CATALOG_SIGNING_KEY and
+# CATALOG_SIGNING_CERT secrets exist (tools/sign_jws.sh writes index.json.jws, a detached JWS with
+# the catalog leaf in x5c, issued by the catalog root), and commits
+# the result to main, where droidtop reads it:
+#   https://raw.githubusercontent.com/<owner>/<repo>/main/index.json
+name: Catalog index
+
+on:
+  schedule:
+    # Four times a day, so a release published without a dispatch is listed within hours.
+    - cron: "41 */6 * * *"
+  # A plugin repository may send this after publishing a release. It asks for a run and nothing
+  # else: what enters the index is what the generator verifies.
+  repository_dispatch:
+    types: [plugin-published]
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "catalog.json"
+      - "catalog-root.pub"
+      - "README.md"
+      - "tools/**"
+      - ".github/workflows/index.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-index
+  cancel-in-progress: false
+
+jobs:
+  index:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Signing tools
+        run: python3 -m pip install --user --break-system-packages 'cryptography>=42'
+
+      - name: Test the tools
+        run: python3 tools/test_build_index.py
+
+      # A catalog fresh from the template has no root key and still names the example organisation:
+      # nothing can be listed until README "Set it up" is done, so the build waits for it.
+      - name: Is the catalog set up?
+        id: setup
+        run: |
+          if [ ! -f catalog-root.pub ] || grep -q '"your-github-organisation' catalog.json; then
+            echo "Not set up yet: add catalog-root.pub and fill in catalog.json (README, Set it up)." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rebuild the index
+        if: steps.setup.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/build_index.py --build
+
+      - name: Check the rebuilt files
+        if: steps.setup.outputs.ready == 'true'
+        run: python3 tools/build_index.py --check
+
+      - name: Sign the index
+        if: steps.setup.outputs.ready == 'true'
+        env:
+          CATALOG_SIGNING_KEY: ${{ secrets.CATALOG_SIGNING_KEY }}
+          CATALOG_SIGNING_CERT: ${{ secrets.CATALOG_SIGNING_CERT }}
+        run: |
+          if [ -n "$CATALOG_SIGNING_KEY" ] && [ -n "$CATALOG_SIGNING_CERT" ]; then
+            # An index whose committed signature still verifies keeps it: ECDSA signatures differ on
+            # every run, so re-signing an unchanged index would commit on every run.
+            if [ -f index.json.jws ] && python3 tools/build_index.py --check-signature >/dev/null 2>&1; then
+              echo "index.json: the committed signature still verifies"
+            else
+              bash tools/sign_jws.sh droidtop-catalog+jws index.json index.json.jws
+            fi
+          else
+            echo "No CATALOG_SIGNING_KEY/CATALOG_SIGNING_CERT secrets: the index is published unsigned." | tee -a "$GITHUB_STEP_SUMMARY"
+            # An unsigned index must not sit beside a signature of an older one.
+            git rm -q --ignore-unmatch index.json.jws
+          fi
+
+      # The committed signature belongs to the previous index until the step above replaces it, so the
+      # signature is checked here, on exactly what is about to be published, and never committed if it fails.
+      - name: Verify the signature as droidtop does
+        if: steps.setup.outputs.ready == 'true'
+        run: python3 tools/build_index.py --check-signature
+
+      - name: Commit it when it changed
+        if: steps.setup.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          # The signature file exists only when the index was signed; their removal is already staged otherwise.
+          git add -- index.json $(ls index.json.jws 2>/dev/null || true)
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+            exit 0
+          fi
+          git config user.name "droidtop-plugin-catalog"
+          git config user.email "catalog@users.noreply.github.com"
+          git commit -q -m "Index: $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push origin HEAD:main
